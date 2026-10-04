@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+# Node
+node_modules/
+# Training data and environments live outside the repo (see README, "Reproduce the model")
+data/
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Third-party image without a redistribution licence: local demos only
+src/web/samples/Wmeter.png

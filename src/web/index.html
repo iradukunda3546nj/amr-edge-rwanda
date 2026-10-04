@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AMR-Edge Rwanda</title>
+  <meta name="description" content="On-device INT8 water-meter reading with cellular MQTT telemetry to WASAC and SMS to the customer." />
+  <meta name="color-scheme" content="dark" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-name">AMR-Edge Rwanda</span>
+      <span class="brand-tag">Small AI for Development</span>
+    </div>
+    <p class="headline">An INT8 model on the meter reads the register and sends a 20-byte authenticated reading over cellular to WASAC and the customer's phone.</p>
+    <div class="model-status" id="modelStatus">Loading model</div>
+  </header>
+
+  <nav class="stages" aria-label="Pipeline stages">
+    <ol>
+      <li data-stage="acquire"><span class="n">01</span><span class="t">Acquisition</span><span class="s"></span></li>
+      <li data-stage="locate"><span class="n">02</span><span class="t">Register localisation</span><span class="s"></span></li>
+      <li data-stage="infer"><span class="n">03</span><span class="t">INT8 inference</span><span class="s"></span></li>
+      <li data-stage="packet"><span class="n">04</span><span class="t">Telemetry packet</span><span class="s"></span></li>
+      <li data-stage="uplink"><span class="n">05</span><span class="t">Cellular uplink</span><span class="s"></span></li>
+      <li data-stage="cloud"><span class="n">06</span><span class="t">WASAC and customer</span><span class="s"></span></li>
+    </ol>
+  </nav>
+
+  <main>
+    <section class="row row-acquire">
+      <article class="panel">
+        <header class="panel-head"><span class="step">01</span><h2>Acquisition</h2></header>
+        <figure class="device">
+          <img src="assets/edge-node.jpg" alt="Edge node prototype: ESP32 camera module on a 3D-printed meter mount" width="625" height="926" />
+          <figcaption>Edge node prototype: ESP32 camera module on a 3D-printed mount that clips over the meter. Here an uploaded photo stands in for the camera frame.</figcaption>
+        </figure>
+        <div class="form">
+          <label class="field"><span>Meter account</span><select id="meterSelect"></select></label>
+          <label class="field">
+            <span>Time since previous reading</span>
+            <select id="intervalSelect">
+              <option value="86400">24 hours (daily report)</option>
+              <option value="604800">7 days</option>
+              <option value="2592000">30 days (manual-reading cycle)</option>
+            </select>
+          </label>
+          <div class="dropzone" id="dropzone">
+            <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp" hidden />
+            <button type="button" class="btn btn-primary" id="browseBtn">Browse meter image</button>
+            <span class="hint">or drop a JPEG or PNG here</span>
+          </div>
+          <dl class="kv" id="imageInfo"></dl>
+        </div>
+      </article>
+
+      <article class="panel">
+        <header class="panel-head">
+          <span class="step">02</span><h2>Register localisation</h2>
+          <div class="tools">
+            <button type="button" class="btn" id="autoBtn" disabled>Auto-locate</button>
+            <button type="button" class="btn" id="drawBtn" aria-pressed="false" disabled>Draw register region</button>
+            <label class="inline">Wheels <input type="number" id="wheelCount" min="3" max="10" placeholder="auto" /></label>
+            <label class="inline"><input type="checkbox" id="showCandidates" /> Candidates</label>
+          </div>
+        </header>
+        <div class="canvas-wrap" id="canvasWrap">
+          <canvas id="visionCanvas" width="720" height="480" aria-label="Meter image with register and wheel regions"></canvas>
+          <div class="empty" id="visionEmpty">Select a meter image to run the pipeline.</div>
+        </div>
+        <div class="legend">
+          <span><i class="sw sw-int"></i>Integer wheel (m³)</span>
+          <span><i class="sw sw-frac"></i>Fraction wheel (red drum)</span>
+          <span><i class="sw sw-win"></i>Register window</span>
+          <span><i class="sw sw-cand"></i>Glyph candidate</span>
+        </div>
+        <p class="status-line" id="locateStatus"></p>
+      </article>
+    </section>
+
+    <section class="row">
+      <article class="panel">
+        <header class="panel-head"><span class="step">03</span><h2>INT8 inference</h2><span class="meta" id="inferMeta"></span></header>
+        <div class="infer-grid">
+          <div class="min0">
+            <h3 class="sub">Per-wheel classification <span class="muted">normalised 24×32 int8 input · softmax over int8 logits</span></h3>
+            <div class="tiles" id="tiles"><p class="placeholder">Waiting for wheel regions.</p></div>
+          </div>
+          <div class="reading-block">
+            <h3 class="sub">Extracted reading</h3>
+            <div class="odometer" id="odometer" aria-live="polite"></div>
+            <div class="reading-value" id="readingValue">—</div>
+            <dl class="kv" id="readingInfo"></dl>
+          </div>
+        </div>
+        <details class="model-card">
+          <summary>Model: depthwise-separable CNN, full-integer post-training quantisation</summary>
+          <div class="model-grid">
+            <table class="table mono" id="layerTable"><thead><tr><th>Op</th><th>Output (H×W×C)</th><th class="r">MACs</th></tr></thead><tbody></tbody></table>
+            <dl class="kv" id="modelInfo"></dl>
+          </div>
+        </details>
+      </article>
+    </section>
+
+    <section class="row">
+      <article class="panel">
+        <header class="panel-head"><span class="step">04</span><h2>Telemetry packet</h2><span class="meta" id="packetMeta"></span></header>
+        <div class="packet-grid">
+          <div class="min0">
+            <h3 class="sub">Payload: 20 bytes, AES-128-CTR + AES-CMAC-32</h3>
+            <div class="scroll-x"><table class="table mono" id="fieldTable"><thead><tr><th>Field</th><th>Value</th><th>On-air bytes</th><th>Protection</th></tr></thead><tbody></tbody></table></div>
+          </div>
+          <div class="min0">
+            <h3 class="sub">MQTT 3.1.1 PUBLISH frame <span class="muted" id="frameMeta"></span></h3>
+            <div class="hexdump" id="frameHex"></div>
+            <div class="legend" id="frameLegend"></div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="row">
+      <article class="panel">
+        <header class="panel-head">
+          <span class="step">05</span><h2>Cellular uplink</h2><span class="meta" id="uplinkMeta"></span>
+          <div class="tools">
+            <label class="inline">Speed
+              <select id="speedSelect"><option value="1">1× real time</option><option value="0.5">0.5×</option><option value="0.25">0.25×</option></select>
+            </label>
+            <button type="button" class="btn" id="replayBtn" disabled>Resend same packet</button>
+          </div>
+        </header>
+        <div class="uplink-grid">
+          <div class="sequence-wrap"><svg class="sequence" id="sequence" role="img" aria-label="Message sequence between edge node, modem, cell site, core network and WASAC broker"></svg></div>
+          <div class="at-console min0">
+            <h3 class="sub">Modem UART (AT commands)</h3>
+            <pre id="atLog"></pre>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="row row-cloud">
+      <article class="panel">
+        <header class="panel-head"><span class="step">06</span><h2>WASAC operations</h2><span class="meta">simulated back end</span></header>
+        <div class="cloud-grid">
+          <div class="min0">
+            <h3 class="sub">Account</h3>
+            <dl class="kv" id="accountInfo"></dl>
+            <h3 class="sub">Ingest decision</h3>
+            <div class="decision" id="decision">—</div>
+            <ol class="steps" id="ingestSteps"></ol>
+          </div>
+          <div class="min0">
+            <h3 class="sub">Reading ledger</h3>
+            <div class="scroll-x"><table class="table mono" id="ledger"><thead><tr><th>Time (UTC)</th><th class="r">Register m³</th><th class="r">Used m³</th><th class="r">m³/day</th><th class="r">Bill RWF</th><th>Status</th></tr></thead><tbody></tbody></table></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel panel-phone">
+        <header class="panel-head"><h2>Customer handset</h2><span class="meta" id="smsMeta"></span></header>
+        <div class="phone" id="phone">
+          <div class="phone-ear"></div>
+          <div class="phone-screen">
+            <div class="phone-bar"><span>MTN RW</span><span id="phoneClock">--:--</span></div>
+            <div class="phone-body" id="phoneBody"><p class="phone-idle">No messages</p></div>
+            <div class="phone-soft"><span>Reply</span><span>Back</span></div>
+          </div>
+          <div class="phone-keys" aria-hidden="true">
+            <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>*</span><span>0</span><span>#</span>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-grid">
+      <section>
+        <h3>Disclaimer</h3>
+        <p>We trained this digit recogniser on the public meter-wheel dataset of Nikić, Bortnik, Lukić, Vukobratović and Mezei, "Lightweight Digit Recognition in Smart Metering System Using Narrowband Internet of Things and Federated Learning", <i>Future Internet</i> 16(11):402, 2024 (GPL-3.0), together with synthetic register images we generated. That dataset comes from a single meter model. Accuracy on other meters therefore depends on image quality and register layout, and an operator may need to mark the register region. The cellular session, the WASAC back end, the customer accounts, the tariff and the *150# short code shown on this page are simulated or illustrative. They do not represent WASAC systems or data.</p>
+      </section>
+      <section>
+        <h3>Path to deployment</h3>
+        <p>For field deployment, we intend to fine-tune the model on images collected from the meter types WASAC has installed in Rwanda, and to validate it against manual readings in a supervised pilot across Gasabo, Kicukiro and Nyarugenge. We also intend to measure on-device latency and battery life on production hardware, and to integrate with WASAC billing and an approved SMS short code, in coordination with WASAC and RURA.</p>
+      </section>
+      <section>
+        <h3>Technical notes</h3>
+        <p>Inference runs in this page on a port of the TFLite reference INT8 kernels, verified bit-exact against TensorFlow Lite.</p>
+        <p>Sample images: "Izsu sayacı" by Satirdan kahraman, Wikimedia Commons, <a href="https://creativecommons.org/licenses/by-sa/4.0/" rel="noopener">CC BY-SA 4.0</a>. The ARAD meter image comes from a public web search, is used here for demonstration only, and remains the property of its owner. It will be replaced with WASAC field images in the pilot.</p>
+        <p class="footer-meta">AMR-Edge Rwanda · Hack-Nation 7th Global AI Hackathon · Small AI for Development</p>
+      </section>
+    </div>
+  </footer>
+
+  <script src="model/digit-int8.js"></script>
+  <script src="js/core/int8-engine.js"></script>
+  <script src="js/core/digit-preprocess.js"></script>
+  <script src="js/core/image-ops.js"></script>
+  <script src="js/core/counter-locator.js"></script>
+  <script src="js/core/telemetry.js"></script>
+  <script src="js/core/mqtt.js"></script>
+  <script src="js/sim/cellular-link.js"></script>
+  <script src="js/sim/wasac-cloud.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

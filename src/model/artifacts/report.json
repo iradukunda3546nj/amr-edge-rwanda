@@ -1,0 +1,14 @@
+{
+  "dataset": "Nikic et al. 2024 (dbortnik/digitsDataset)",
+  "train_samples": 106976,
+  "val_samples": 3183,
+  "params": 7867,
+  "macs": 492992,
+  "fp32_bytes": 34032,
+  "int8_bytes": 20552,
+  "int8_weight_bytes": 7900,
+  "val_acc_fp32": 1.0,
+  "val_acc_int8": 1.0,
+  "synthetic_val_acc_int8": 0.983,
+  "input": "24x32 grayscale"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "amr-edge-tools",
+  "private": true,
+  "description": "Test suite for the AMR-Edge browser pipeline (no dependencies, Node >= 20)",
+  "engines": { "node": ">=20" },
+  "scripts": { "test": "node --test \"test/*.test.cjs\"" }
+}
