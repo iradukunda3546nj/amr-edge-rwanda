@@ -44,11 +44,12 @@
 
   /* ---------------------------------------------------------------- stages */
   const STAGES = ['acquire', 'locate', 'infer', 'packet', 'uplink', 'cloud'];
+  const STAGE_TEXT = { active: 'running', done: 'done', failed: 'failed' };
   function stage(name, state, text = '') {
     const li = document.querySelector(`.stages li[data-stage="${name}"]`);
     li.classList.remove('active', 'done', 'failed');
     if (state) li.classList.add(state);
-    li.querySelector('.s').textContent = text;
+    li.querySelector('.s').textContent = text || STAGE_TEXT[state] || 'idle';
   }
   function resetStages(from) {
     for (const s of STAGES.slice(STAGES.indexOf(from))) stage(s, null, '');
@@ -70,7 +71,7 @@
     try {
       state.model = new Int8Model(AMR.digitModel);
       const r = state.model.report;
-      $('modelStatus').textContent = `INT8 model ready · ${(r.int8_bytes / 1024).toFixed(1)} KB · val ${(r.val_acc_int8 * 100).toFixed(1)}%`;
+      $('modelStatus').textContent = `INT8 model loaded · ${(r.int8_bytes / 1024).toFixed(1)} KB · val. accuracy ${(r.val_acc_int8 * 100).toFixed(1)}%`;
       $('modelStatus').classList.add('ready');
       renderModelCard();
     } catch (e) {
@@ -134,26 +135,27 @@
     const rgba = ctx.getImageData(0, 0, w, h).data;
     state.image = { name: file.name, bytes: file.size, natural: [bitmap.width, bitmap.height], w, h, rgba, gray: ops.toGray(rgba, w, h) };
     bitmap.close();
-    setKv($('imageInfo'), [
-      ['File', file.name],
-      ['Size', `${fmt(file.size / 1024)} KB`],
-      ['Resolution', `${state.image.natural[0]}×${state.image.natural[1]}`],
-      ['Working frame', `${w}×${h} luma`],
-    ]);
+    renderImageInfo([file.name, `${fmt(file.size / 1024)} KB`, `${state.image.natural[0]}×${state.image.natural[1]} px`, `${w}×${h} px luma`]);
     stage('acquire', 'done', `${w}×${h}`);
     $('autoBtn').disabled = false;
     $('drawBtn').disabled = false;
     if (run === state.run) locate();
   }
 
+  function renderImageInfo(values = ['—', '—', '—', '—']) {
+    setKv($('imageInfo'), ['File', 'Size', 'Resolution', 'Working frame'].map((k, i) => [k, values[i]]));
+  }
+
   function initAcquisition() {
     const input = $('fileInput');
     $('browseBtn').addEventListener('click', () => input.click());
     input.addEventListener('change', () => { loadFile(input.files[0]); input.value = ''; });
-    const dz = $('dropzone');
-    dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('over'); });
-    dz.addEventListener('dragleave', () => dz.classList.remove('over'));
-    dz.addEventListener('drop', (e) => { e.preventDefault(); dz.classList.remove('over'); loadFile(e.dataTransfer.files[0]); });
+    for (const dz of [$('dropzone'), $('canvasWrap')]) {
+      dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('over'); });
+      dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+      dz.addEventListener('drop', (e) => { e.preventDefault(); dz.classList.remove('over'); loadFile(e.dataTransfer.files[0]); });
+    }
+    renderImageInfo();
   }
 
   /* ---------------------------------------------------------------- 02 localisation */
@@ -186,17 +188,16 @@
     if (!r.ok) {
       stage('locate', 'failed', 'not found');
       status.className = 'status-line warn';
-      status.textContent = `No register found automatically (${ms.toFixed(0)} ms). Drag a box around the digit window with "Draw register region".`;
+      status.textContent = `No register found (${ms.toFixed(0)} ms). Use Draw region to mark the digit window.`;
       clearDownstream();
       return;
     }
     const nFrac = r.rois.filter((x) => x.fractional).length;
     const orient = r.frame.turns ? `rotated ${r.frame.turns * 90}°` : 'upright';
     status.className = 'status-line';
-    status.textContent = `${r.method === 'auto' ? 'Auto' : r.method === 'region' ? 'Operator region' : 'Operator region, even split'}: ` +
-      `${r.rois.length} wheels (${r.rois.length - nFrac} integer, ${nFrac} fraction) · ${orient} · ` +
-      `${r.polarity || 'n/a'} print · ${r.candidates.length} glyph candidates · ${ms.toFixed(0)} ms. ` +
-      'If boxes are wrong, draw the register region and set the wheel count.';
+    status.textContent = `${r.method === 'auto' ? 'Auto' : r.method === 'region' ? 'Operator region' : 'Operator region, even split'} · ` +
+      `${r.rois.length} wheels (${r.rois.length - nFrac} int, ${nFrac} frac) · ${orient} · ` +
+      `${r.polarity || 'n/a'} print · ${r.candidates.length} candidates · ${ms.toFixed(0)} ms`;
     stage('locate', 'done', `${r.rois.length} wheels`);
     infer();
   }
@@ -223,22 +224,24 @@
     }
     if (r && r.ok) {
       const win = r.window;
-      vctx.setLineDash([6, 4]);
-      vctx.strokeStyle = 'rgba(229,231,235,0.9)';
       vctx.lineWidth = lw;
+      vctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      vctx.strokeRect(win.x - 4, win.y - 4, win.w + 8, win.h + 8);
+      vctx.setLineDash([6, 4]);
+      vctx.strokeStyle = '#374151';
       vctx.strokeRect(win.x - 4, win.y - 4, win.w + 8, win.h + 8);
       vctx.setLineDash([]);
       r.rois.forEach((b, i) => {
-        vctx.strokeStyle = b.fractional ? '#ef4444' : '#3b82f6';
+        vctx.strokeStyle = b.fractional ? '#d32f2f' : '#1f6fd1';
         vctx.lineWidth = lw * 1.3;
         vctx.strokeRect(b.x, b.y, b.w, b.h);
         const w = state.wheels && state.wheels[i];
         if (w) {
-          vctx.font = `600 ${Math.max(11, Math.round(b.h * 0.22))}px JetBrains Mono, monospace`;
+          vctx.font = `600 ${Math.max(11, Math.round(b.h * 0.22))}px Consolas, monospace`;
           const full = `${w.label} ${(w.confidence * 100).toFixed(0)}%`;
           const label = vctx.measureText(full).width + 6 <= b.w ? full : w.label; // avoid overlapping neighbours
           const tw = vctx.measureText(label).width + 6, th = Math.max(14, Math.round(b.h * 0.28));
-          vctx.fillStyle = b.fractional ? '#ef4444' : '#3b82f6';
+          vctx.fillStyle = b.fractional ? '#d32f2f' : '#1f6fd1';
           vctx.fillRect(b.x, b.y - th - 2, tw, th);
           vctx.fillStyle = '#fff';
           vctx.textBaseline = 'middle';
@@ -247,7 +250,7 @@
       });
     }
     if (drag) {
-      vctx.strokeStyle = '#38bdf8';
+      vctx.strokeStyle = '#0a5fb4';
       vctx.lineWidth = lw;
       vctx.setLineDash([4, 3]);
       vctx.strokeRect(drag.x, drag.y, drag.w, drag.h);
@@ -270,7 +273,7 @@
       $('canvasWrap').classList.toggle('drawing', on);
       if (on) {
         $('locateStatus').className = 'status-line';
-        $('locateStatus').textContent = 'Drag a box tightly around the digit window. Set "Wheels" to the number of digits for a more reliable split.';
+        $('locateStatus').textContent = 'Drag a box around the digit window. Set Wheels to the digit count for a reliable split.';
       }
     });
     canvas.addEventListener('pointerdown', (e) => {
@@ -336,34 +339,40 @@
     const minConf = Math.min(...wheels.map((w) => w.confidence));
     state.reading = { intDigits, fracDigits, value, minConf, trimmed, unreadable, lowConfidence: unreadable || minConf < LOW_CONFIDENCE };
 
-    renderTiles();
+    renderWheels();
     renderReading(ms);
     drawVision();
-    $('inferMeta').textContent = `${state.wheels.length} × ${fmt(state.model.macs)} MACs · ${ms.toFixed(1)} ms in browser`;
+    $('inferMeta').textContent = `${state.wheels.length} wheels × ${fmt(state.model.macs)} MACs · ${ms.toFixed(1)} ms (browser)`;
     stage('infer', state.reading.lowConfidence ? 'failed' : 'done', `${intDigits}${fracDigits ? '.' + fracDigits : ''}`);
     seal();
   }
 
-  function renderTiles() {
-    const box = $('tiles');
-    box.replaceChildren();
-    for (const w of state.wheels) {
-      const t = el('div', `tile${w.fractional ? ' frac' : ''}${w.confidence < LOW_CONFIDENCE ? ' low' : ''}`);
+  function renderWheels() {
+    const tbody = $('wheelTable').tBodies[0];
+    tbody.replaceChildren();
+    state.wheels.forEach((w, i) => {
+      const tr = el('tr', `${w.fractional ? 'frac' : ''}${w.confidence < LOW_CONFIDENCE ? ' low' : ''}`);
       const c = el('canvas');
       c.width = OUT_W;
       c.height = OUT_H;
       const img = new ImageData(OUT_W, OUT_H);
-      w.input.forEach((v, i) => { img.data.set([v, v, v, 255], i * 4); });
+      w.input.forEach((v, j) => { img.data.set([v, v, v, 255], j * 4); });
       c.getContext('2d').putImageData(img, 0, 0);
+      const input = el('td');
+      input.append(c);
       const bar = el('div', 'bar');
       const fill = el('span');
       fill.style.width = `${(w.confidence * 100).toFixed(1)}%`;
       bar.append(fill);
-      t.append(c, el('div', 'digit', w.label === 'X' ? 'non-digit' : w.label), bar,
-        el('div', 'conf', `p = ${w.confidence.toFixed(3)}`),
-        el('div', 'alt', `next: ${w.runnerUpLabel} (${w.runnerUpConfidence.toFixed(3)})`));
-      box.append(t);
-    }
+      const conf = el('div', 'conf');
+      conf.append(bar, document.createTextNode(w.confidence.toFixed(3)));
+      const confCell = el('td');
+      confCell.append(conf);
+      tr.append(el('td', 'r num', String(i + 1)), el('td', 'type', w.fractional ? 'fraction' : 'integer'), input,
+        el('td', 'cls', w.label === 'X' ? 'non-digit' : w.label), confCell,
+        el('td', 'num', `${w.runnerUpLabel} (${w.runnerUpConfidence.toFixed(3)})`));
+      tbody.append(tr);
+    });
   }
 
   function renderReading(ms) {
@@ -376,14 +385,18 @@
       for (const d of r.fracDigits) odo.append(el('span', 'cell frac', d));
     }
     odo.append(el('span', 'unit', 'm³'));
-    $('readingValue').textContent = `${fmtM3(r.value)} m³`;
-    setKv($('readingInfo'), [
-      ['Wheels', `${r.intDigits.length} integer + ${r.fracDigits.length} fraction`],
-      ['Lowest wheel confidence', r.minConf.toFixed(3)],
-      ['Non-digit glyphs trimmed', String(r.trimmed)],
-      ['Status', r.unreadable ? 'flagged: unreadable wheel' : r.lowConfidence ? `flagged: below ${LOW_CONFIDENCE}` : 'accepted'],
-      ['Inference time (browser)', `${ms.toFixed(1)} ms`],
+    renderReadingInfo([
+      `${fmtM3(r.value)} m³`,
+      `${r.intDigits.length} int + ${r.fracDigits.length} frac`,
+      r.minConf.toFixed(3),
+      String(r.trimmed),
+      `${ms.toFixed(1)} ms`,
+      r.unreadable ? 'Flagged: unreadable wheel' : r.lowConfidence ? `Flagged: p < ${LOW_CONFIDENCE}` : 'Accepted',
     ]);
+  }
+
+  function renderReadingInfo(values = ['—', '—', '—', '—', '—', '—']) {
+    setKv($('readingInfo'), ['Reading', 'Wheels', 'Min. confidence', 'Non-digits trimmed', 'Inference latency', 'Status'].map((k, i) => [k, values[i]]));
   }
 
   /* ---------------------------------------------------------------- 04 packet */
@@ -448,7 +461,7 @@
     const cls = (i) => (i < topicStart ? 'h-fixed' : i < topicEnd ? 'h-topic' : i < pidEnd ? 'h-pid' : i < tagStart ? 'h-pay' : 'h-tag');
     const hd = $('frameHex');
     hd.replaceChildren(...Array.from(frame, (b, i) => el('span', cls(i), hex(b))));
-    $('frameMeta').textContent = `${frame.length} B, topic ${topic}`;
+    $('frameMeta').textContent = `${frame.length} B · ${topic}`;
     const lg = $('frameLegend');
     lg.replaceChildren();
     for (const [c, label] of [['h-fixed', 'fixed header + remaining length'], ['h-topic', 'topic'], ['h-pid', 'packet id'], ['h-pay', 'payload'], ['h-tag', 'CMAC tag']]) {
@@ -456,12 +469,12 @@
       s.append(el('i', `sw ${c}`), document.createTextNode(label));
       lg.append(s);
     }
-    $('packetMeta').textContent = `20 B payload · ${frame.length} B MQTT frame · a VGA JPEG would be ~60-100 KB`;
+    $('packetMeta').textContent = `${packet.length} B payload · ${frame.length} B MQTT frame`;
   }
 
   /* ---------------------------------------------------------------- 05 uplink */
   const SVGNS = 'http://www.w3.org/2000/svg';
-  const LAYER_COLOR = { AT: '#94a3b8', PHY: '#a78bfa', RRC: '#a78bfa', NAS: '#f472b6', TCP: '#fbbf24', TLS: '#34d399', MQTT: '#38bdf8', APP: '#94a3b8' };
+  const LAYER_COLOR = { AT: '#6b7280', PHY: '#6d48b8', RRC: '#6d48b8', NAS: '#a3366e', TCP: '#9a6700', TLS: '#1a7f37', MQTT: '#0a5fb4', APP: '#6b7280' };
   const svgEl = (tag, attrs, text) => {
     const e = document.createElementNS(SVGNS, tag);
     for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
@@ -529,7 +542,7 @@
     const rows = buildSequence(session);
     $('atLog').replaceChildren();
     $('replayBtn').disabled = true;
-    $('uplinkMeta').textContent = `${session.events.length} messages · ~${(session.totalMs / 1000).toFixed(1)} s nominal · ${fmt(session.airBytes)} B on the bearer`;
+    $('uplinkMeta').textContent = `${session.events.length} messages · ${(session.totalMs / 1000).toFixed(1)} s nominal · ${fmt(session.airBytes)} B on bearer`;
     const wrap = document.querySelector('.sequence-wrap');
     const speed = Number($('speedSelect').value);
     let delivered = null;
@@ -558,8 +571,8 @@
       ['Customer', a.customer],
       ['Zone', a.zone],
       ['SMS recipient', a.msisdn],
-      ['Last accepted reading', last ? `${fmtM3(last.m3)} m³` : 'none'],
-      ['Readings on ledger', String(a.readings.length)],
+      ['Last accepted', last ? `${fmtM3(last.m3)} m³` : '—'],
+      ['Ledger entries', String(a.readings.length)],
     ]);
     const tbody = $('ledger').tBodies[0];
     tbody.replaceChildren();
@@ -572,7 +585,7 @@
     }
     if (!a.readings.length) {
       const tr = el('tr');
-      const td = el('td', 'muted', 'No readings yet for this meter.');
+      const td = el('td', 'empty-row', 'No readings');
       td.colSpan = 6;
       tr.append(td);
       tbody.append(tr);
@@ -583,29 +596,32 @@
     stage('cloud', entry.decision === 'rejected' ? 'failed' : 'done', entry.decision);
     const d = $('decision');
     d.className = `decision ${entry.decision}`;
-    d.textContent = entry.decision === 'rejected' ? `REJECTED: ${entry.reason}` : entry.decision.toUpperCase();
+    d.textContent = entry.decision === 'rejected' ? `REJECTED · ${entry.reason}` : entry.decision.toUpperCase();
     $('ingestSteps').replaceChildren(...entry.steps.map((s) => el('li', '', s)));
     renderAccount();
     if (entry.sms) showSms(entry.sms, entry.reading.epoch);
   }
 
+  function renderSmsInfo(values = ['—', '—', '—']) {
+    setKv($('smsInfo'), ['From', 'To', 'Delivered'].map((k, i) => [k, values[i]]));
+  }
+
   function showSms(text, epoch) {
-    const body = $('phoneBody');
-    body.replaceChildren(el('div', 'from', 'WASAC'), el('div', 'when', `${localClock(epoch)} CAT`), el('div', '', text));
-    $('phoneClock').textContent = localClock(epoch);
-    $('smsMeta').textContent = `${text.length}/160 chars · 1 SMS`;
-    const phone = $('phone');
-    phone.classList.remove('incoming');
-    void phone.offsetWidth;
-    phone.classList.add('incoming');
+    renderSmsInfo(['WASAC', currentAccount().msisdn, `${localClock(epoch)} CAT`]);
+    $('phoneBody').textContent = text;
+    $('smsMeta').textContent = `${text.length}/160 chars`;
   }
 
   function clearDownstream() {
     state.wheels = null;
-    $('tiles').replaceChildren(el('p', 'placeholder', 'Waiting for wheel regions.'));
-    $('odometer').replaceChildren();
-    $('readingValue').textContent = '—';
-    $('readingInfo').replaceChildren();
+    const td = el('td', 'empty-row', 'No wheel regions');
+    td.colSpan = 6;
+    const tr = el('tr');
+    tr.append(td);
+    $('wheelTable').tBodies[0].replaceChildren(tr);
+    $('odometer').replaceChildren(el('span', 'placeholder', '—'));
+    $('inferMeta').textContent = '';
+    renderReadingInfo();
   }
 
   /* ---------------------------------------------------------------- boot */
@@ -615,6 +631,8 @@
     initAcquisition();
     initLocalisation();
     renderAccount();
+    renderSmsInfo();
+    clearDownstream();
     $('replayBtn').addEventListener('click', () => { if (state.sealed) { state.run++; uplink(); } });
     if (!window.crypto || !crypto.subtle) {
       $('modelStatus').textContent = 'WebCrypto unavailable: open over https or http://localhost';
