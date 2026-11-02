@@ -166,9 +166,18 @@
             <div class="scroll-x"><table class="table mono" id="ledger"><thead><tr><th>Time (UTC)</th><th class="r">Register m³</th><th class="r">Used m³</th><th class="r">m³/day</th><th class="r">Bill RWF</th><th>Status</th></tr></thead><tbody></tbody></table></div>
           </div>
           <div class="min0">
-            <h3 class="sub">Customer SMS <span class="muted" id="smsMeta"></span></h3>
-            <dl class="kv" id="smsInfo"></dl>
-            <div class="sms" id="phoneBody"><span class="muted">No message sent</span></div>
+            <h3 class="sub">Customer handset <span class="muted" id="smsMeta"></span></h3>
+            <div class="phone" id="phone">
+              <div class="phone-ear"></div>
+              <div class="phone-screen">
+                <div class="phone-bar"><span>MTN RW</span><span id="phoneClock">--:--</span></div>
+                <div class="phone-body" id="phoneBody"><p class="phone-idle">No messages</p></div>
+                <div class="phone-soft"><span>Reply</span><span>Back</span></div>
+              </div>
+              <div class="phone-keys" aria-hidden="true">
+                <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>*</span><span>0</span><span>#</span>
+              </div>
+            </div>
           </div>
         </div>
       </article>

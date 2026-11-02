@@ -602,14 +602,15 @@
     if (entry.sms) showSms(entry.sms, entry.reading.epoch);
   }
 
-  function renderSmsInfo(values = ['—', '—', '—']) {
-    setKv($('smsInfo'), ['From', 'To', 'Delivered'].map((k, i) => [k, values[i]]));
-  }
-
   function showSms(text, epoch) {
-    renderSmsInfo(['WASAC', currentAccount().msisdn, `${localClock(epoch)} CAT`]);
-    $('phoneBody').textContent = text;
-    $('smsMeta').textContent = `${text.length}/160 chars`;
+    const body = $('phoneBody');
+    body.replaceChildren(el('div', 'from', 'WASAC'), el('div', 'when', `${localClock(epoch)} CAT`), el('div', '', text));
+    $('phoneClock').textContent = localClock(epoch);
+    $('smsMeta').textContent = `${text.length}/160 chars · 1 SMS`;
+    const phone = $('phone');
+    phone.classList.remove('incoming');
+    void phone.offsetWidth;
+    phone.classList.add('incoming');
   }
 
   function clearDownstream() {
@@ -631,7 +632,6 @@
     initAcquisition();
     initLocalisation();
     renderAccount();
-    renderSmsInfo();
     clearDownstream();
     $('replayBtn').addEventListener('click', () => { if (state.sealed) { state.run++; uplink(); } });
     if (!window.crypto || !crypto.subtle) {
