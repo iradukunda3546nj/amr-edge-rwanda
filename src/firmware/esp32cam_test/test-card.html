@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AMR-Edge Test Card</title>
+<style>
+  /* Printable registers for the ESP32-CAM test. Print at 100% scale (no "fit to page").
+     Digit windows follow the training crops: aspect 0.8, glyph ~62% of window height.
+     Fonts are ones the model saw in synthetic training (Bahnschrift, Arial, Verdana). */
+  :root { --drum-w: 12mm; --drum-h: 15mm; --glyph: 9.3mm; }
+  @page { size: A4; margin: 15mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 15mm; background: #fff; color: #111; font: 10pt 'Segoe UI', Arial, sans-serif; }
+  @media print { body { padding: 0; } .note { display: none; } }
+  h1 { font-size: 13pt; margin: 0 0 2mm; }
+  .note { font-size: 9pt; color: #555; margin: 0 0 8mm; max-width: 170mm; }
+  .register { margin: 0 0 12mm; }
+  .label { font-size: 8pt; color: #666; margin-bottom: 2mm; }
+  .window { display: inline-flex; gap: 1.5mm; padding: 3mm; background: #fff; }
+  .drum { width: var(--drum-w); height: var(--drum-h); display: grid; place-items: center; font-size: calc(var(--glyph) / 0.72); line-height: 1; }
+  .dark .drum { background: #1b1b1b; color: #fff; }
+  .light .drum { background: #e4e4e4; color: #111; }
+  .drum.red { background: #b3261e; color: #fff; }
+  .bahn { font-family: Bahnschrift, 'DIN Alternate', Arial, sans-serif; font-weight: 600; }
+  .arial { font-family: Arial, sans-serif; font-weight: 700; }
+  .verdana { font-family: Verdana, sans-serif; font-weight: 700; }
+</style>
+</head>
+<body>
+<h1>AMR-Edge ESP32-CAM test card</h1>
+<p class="note">Print at 100% scale on plain paper (a screen produces moiré). Mount the camera 10–15 cm away, square to the card. In the test page, box one register and set Wheels to its digit count.</p>
+
+<div class="register"><div class="label">A · 5 wheels · Bahnschrift · dark drums</div>
+  <div class="window dark bahn"><span class="drum">0</span><span class="drum">2</span><span class="drum">7</span><span class="drum">1</span><span class="drum">8</span></div></div>
+
+<div class="register"><div class="label">B · 5 wheels · Arial Bold · light drums</div>
+  <div class="window light arial"><span class="drum">1</span><span class="drum">3</span><span class="drum">9</span><span class="drum">6</span><span class="drum">5</span></div></div>
+
+<div class="register"><div class="label">C · 5 wheels · Verdana Bold · dark drums</div>
+  <div class="window dark verdana"><span class="drum">4</span><span class="drum">0</span><span class="drum">5</span><span class="drum">9</span><span class="drum">2</span></div></div>
+
+<div class="register"><div class="label">D · 8 wheels · Bahnschrift · 5 integer + 3 fraction (red) drums</div>
+  <div class="window dark bahn"><span class="drum">0</span><span class="drum">0</span><span class="drum">3</span><span class="drum">4</span><span class="drum">7</span><span class="drum red">6</span><span class="drum red">0</span><span class="drum red">2</span></div></div>
+</body>
+</html>

@@ -156,6 +156,22 @@
       dz.addEventListener('drop', (e) => { e.preventDefault(); dz.classList.remove('over'); loadFile(e.dataTransfer.files[0]); });
     }
     renderImageInfo();
+    for (const b of document.querySelectorAll('[data-sample]')) {
+      b.addEventListener('click', () => loadSample(b.dataset.sample));
+    }
+  }
+
+  /* Fetch a bundled sample so the demo runs without a local image (e.g. on a phone). */
+  async function loadSample(url) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(String(res.status));
+      const blob = await res.blob();
+      const type = blob.type.startsWith('image/') ? blob.type : (/\.png$/i.test(url) ? 'image/png' : 'image/jpeg');
+      await loadFile(new File([blob], url.split('/').pop(), { type }));
+    } catch (e) {
+      stage('acquire', 'failed', 'sample unavailable');
+    }
   }
 
   /* ---------------------------------------------------------------- 02 localisation */
@@ -633,6 +649,7 @@
     initLocalisation();
     renderAccount();
     clearDownstream();
+    if (state.model) loadSample('samples/meter-c-baylan.jpg');
     $('replayBtn').addEventListener('click', () => { if (state.sealed) { state.run++; uplink(); } });
     if (!window.crypto || !crypto.subtle) {
       $('modelStatus').textContent = 'WebCrypto unavailable: open over https or http://localhost';

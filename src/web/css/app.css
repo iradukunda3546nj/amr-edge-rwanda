@@ -86,6 +86,7 @@ select { height: 26px; padding: 0 6px; background: #fff; border: 1px solid var(-
 .form { display: flex; flex-direction: column; gap: 10px; }
 .form * + .sub { margin-top: 4px; }
 .dropzone { display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px dashed var(--line-strong); border-radius: var(--radius); background: var(--surface-2); }
+.samples { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .dropzone.over { border-color: var(--accent); background: var(--accent-soft); }
 .hint { font-size: 11px; color: var(--text-3); }
 
